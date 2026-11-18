@@ -30,7 +30,7 @@ footer{text-align:center;color:#777;padding:40px 15px;font-size:13px}
 <header>
   <div class="brand">You<span>Maurice</span></div>
   <form class="search" id="searchForm"><input id="searchInput" type="search" placeholder="Search videos..." aria-label="Search videos"><button aria-label="Search">⌕</button></form>
-  <button class="action primary" id="uploadOpen">＋ Create</button>
+  <button class="action" id="authOpen">Sign in</button><button class="action primary" id="uploadOpen">＋ Create</button>
 </header>
 <div class="layout">
   <aside aria-label="Main navigation">
@@ -47,6 +47,19 @@ footer{text-align:center;color:#777;padding:40px 15px;font-size:13px}
 </div>
 <footer>YouMaurice · A place to watch and share videos</footer>
 
+<div class="modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <div class="dialog">
+    <div class="dialog-head"><h2 id="authTitle">Sign in to YouMaurice</h2><button class="close" id="authClose" aria-label="Close">×</button></div>
+    <form id="authForm">
+      <div class="field"><label for="authEmail">Email</label><input id="authEmail" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="authPassword">Password</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required></div>
+      <button class="submit" type="submit">Sign in</button>
+      <button class="action" style="width:100%;margin-top:10px" type="button" id="signUpButton">Create account</button>
+      <p class="hint" id="authStatus" role="status">Sign in or create an account to upload videos that everyone can watch.</p>
+    </form>
+  </div>
+</div>
+
 <div class="modal" id="uploadModal" role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
   <div class="dialog">
     <div class="dialog-head"><h2 id="uploadTitle">Create a video post</h2><button class="close" id="uploadClose" aria-label="Close">×</button></div>
@@ -55,7 +68,7 @@ footer{text-align:center;color:#777;padding:40px 15px;font-size:13px}
       <div class="field"><label for="creator">Your channel name</label><input id="creator" maxlength="40" required placeholder="Your name or channel"></div>
       <div class="field"><label for="description">Description</label><textarea id="description" maxlength="1000" placeholder="What is your video about?"></textarea></div>
       <div class="field"><label for="category">Category</label><select id="category" class="field-input"><option value="fun">Fun</option><option value="learning">Learning</option><option value="music">Music</option><option value="gaming">Gaming</option></select></div>
-      <div class="field"><label for="videoFile">Choose a video</label><input id="videoFile" type="file" accept="video/*" required><div class="hint">For this first version, uploads are saved in this browser on this device. Keep the original video file too.</div></div>
+      <div class="field"><label for="videoFile">Choose a video</label><input id="videoFile" type="file" accept="video/*" required><div class="hint">Videos are uploaded to YouMaurice online so other visitors can watch them. For this version, choose a video up to 6 MB. You must be signed in.</div></div>
       <div class="field"><label for="thumbnailFile">Thumbnail (optional)</label><input id="thumbnailFile" type="file" accept="image/*"></div>
       <button class="submit" type="submit">Publish video</button>
       <p class="hint" id="uploadStatus" role="status"></p>
@@ -73,7 +86,12 @@ footer{text-align:center;color:#777;padding:40px 15px;font-size:13px}
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const SUPABASE_URL = "https://regypbkumknvzlrklgtm.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_aBu6qBmyYX33jyU-XYg9UA_4Gs5IBSo";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+let currentUser = null;
 const demoVideos = [
  {id:'demo1',title:'Big Buck Bunny — Animated Short',creator:'Blender Foundation',category:'fun',views:'Demo video',description:'A sample animated short used to demonstrate video playback.',src:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',poster:'https://images.unsplash.com/photo-1490750967868-88aa4486c946?w=900'},
  {id:'demo2',title:'Sintel — Movie Trailer',creator:'Durian Open Movie Project',category:'fun',views:'Demo video',description:'A sample trailer for testing the video player.',src:'https://media.w3.org/2010/05/sintel/trailer.mp4',poster:'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=900'},
@@ -126,9 +144,46 @@ function watch(v){
 }
 async function refreshUploads(){
  const saved=await getUploads();
- videos=[...saved.map(v=>({...v,localUpload:true,views:'Your upload'})),...demoVideos];render();
+ const {data:cloudRows,error}=await supabase.from('videos').select('*').order('created_at',{ascending:false});
+ if(error) console.error('Could not load shared videos:',error.message);
+ const cloud=(cloudRows||[]).map(v=>({
+  id:v.id,title:v.title,creator:v.channel_name,description:v.description||'',category:v.category||'fun',
+  src:supabase.storage.from('videos').getPublicUrl(v.video_path).data.publicUrl,
+  poster:v.thumbnail_path?supabase.storage.from('videos').getPublicUrl(v.thumbnail_path).data.publicUrl:'',
+  views:'Community video',createdAt:v.created_at
+ }));
+ videos=[...cloud,...saved.map(v=>({...v,localUpload:true,views:'Saved on this device'})),...demoVideos];render();
 }
-document.getElementById('uploadOpen').onclick=()=>openModal('uploadModal');
+async function updateAuthButton(){
+ const {data}=await supabase.auth.getSession();
+ currentUser=data.session?.user||null;
+ document.getElementById('authOpen').textContent=currentUser?'Sign out':'Sign in';
+ document.getElementById('uploadOpen').disabled=!currentUser;
+ document.getElementById('uploadOpen').title=currentUser?'Create a video':'Sign in before uploading';
+}
+document.getElementById('uploadOpen').onclick=()=>{if(!currentUser){openModal('authModal');return}openModal('uploadModal')};
+document.getElementById('authOpen').onclick=async()=>{
+ if(currentUser){await supabase.auth.signOut();await updateAuthButton();return}
+ openModal('authModal');
+};
+document.getElementById('authClose').onclick=()=>closeModal('authModal');
+document.getElementById('authForm').addEventListener('submit',async e=>{
+ e.preventDefault();const status=document.getElementById('authStatus');
+ const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;
+ const {error}=await supabase.auth.signInWithPassword({email,password});
+ if(error){status.textContent=error.message;return}
+ status.textContent='Signed in!';await updateAuthButton();await refreshUploads();setTimeout(()=>closeModal('authModal'),500);
+});
+document.getElementById('signUpButton').onclick=async()=>{
+ const status=document.getElementById('authStatus');
+ const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;
+ if(!email||password.length<6){status.textContent='Enter an email and a password with at least 6 characters.';return}
+ const {data,error}=await supabase.auth.signUp({email,password});
+ if(error){status.textContent=error.message;return}
+ status.textContent=data.session?'Account created and signed in!':'Account created. Check your email for a confirmation link, then sign in.';
+ if(data.session){await updateAuthButton();await refreshUploads()}
+};
+supabase.auth.onAuthStateChange(()=>{updateAuthButton()});
 document.getElementById('uploadClose').onclick=()=>closeModal('uploadModal');
 document.getElementById('watchClose').onclick=()=>{document.getElementById('player').pause();closeModal('watchModal')};
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m){if(m.id==='watchModal')document.getElementById('player').pause();closeModal(m.id)}}));
@@ -139,15 +194,40 @@ document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{currentFilter=b.dat
 document.getElementById('uploadForm').addEventListener('submit',async e=>{
  e.preventDefault();
  const status=document.getElementById('uploadStatus'),file=document.getElementById('videoFile').files[0],image=document.getElementById('thumbnailFile').files[0];
+ if(!currentUser){status.textContent='Please sign in first.';return}
  if(!file)return;
- if(file.size>150*1024*1024){status.textContent='Please choose a video smaller than 150 MB for this browser demo.';return}
- const item={id:'upload-'+Date.now(),title:document.getElementById('title').value.trim(),creator:document.getElementById('creator').value.trim(),description:document.getElementById('description').value.trim(),category:document.getElementById('category').value,file,poster:image?URL.createObjectURL(image):'',createdAt:Date.now()};
+ if(file.size>6*1024*1024){status.textContent='Please choose a video smaller than 6 MB for this version.';return}
+ status.textContent='Uploading video...';
+ const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+ const videoPath=currentUser.id+'/'+Date.now()+'-'+safeName;
  try{
-  await new Promise((resolve,reject)=>{const tx=db.transaction('videos','readwrite');tx.objectStore('videos').put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});
-  status.textContent='Published in this browser!';e.target.reset();await refreshUploads();currentView='mine';document.querySelectorAll('aside button').forEach(x=>x.classList.toggle('active',x.dataset.view==='mine'));render();setTimeout(()=>{closeModal('uploadModal');status.textContent=''},700);
- }catch(err){status.textContent='Could not save this video in your browser. Try a smaller file.';console.error(err)}
+  const {error:uploadError}=await supabase.storage.from('videos').upload(videoPath,file,{contentType:file.type||'video/mp4',upsert:false});
+  if(uploadError)throw uploadError;
+  let thumbnailPath=null;
+  if(image){
+   const imageName=image.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+   thumbnailPath=currentUser.id+'/'+Date.now()+'-'+imageName;
+   const {error:imageError}=await supabase.storage.from('videos').upload(thumbnailPath,image,{contentType:image.type,upsert:false});
+   if(imageError)throw imageError;
+  }
+  const {error:rowError}=await supabase.from('videos').insert({
+   title:document.getElementById('title').value.trim(),
+   channel_name:document.getElementById('creator').value.trim(),
+   description:document.getElementById('description').value.trim(),
+   category:document.getElementById('category').value,
+   video_path:videoPath,thumbnail_path:thumbnailPath,user_id:currentUser.id
+  });
+  if(rowError)throw rowError;
+  status.textContent='Published online! Everyone can now see this video.';
+  e.target.reset();await refreshUploads();currentView='home';
+  document.querySelectorAll('aside button').forEach(x=>x.classList.toggle('active',x.dataset.view==='home'));render();
+  setTimeout(()=>{closeModal('uploadModal');status.textContent=''},1200);
+ }catch(err){
+  status.textContent='Upload failed: '+(err.message||'Please try again.');
+  console.error(err);
+ }
 });
-(async()=>{try{await loadDatabase();await refreshUploads()}catch(e){grid.innerHTML='<p class="empty">Your browser does not support local video storage. Try a recent version of Chrome, Safari, Firefox, or Edge.</p>';console.error(e)}})();
+(async()=>{try{await loadDatabase();await updateAuthButton();await refreshUploads()}catch(e){grid.innerHTML='<p class="empty">Your browser does not support local video storage. Try a recent version of Chrome, Safari, Firefox, or Edge.</p>';console.error(e)}})();
 </script>
 </body>
 </html>

@@ -1,61 +1,59 @@
 # YouMaurice
 
-<div align="center">
-  <h2>A simple place to watch and share videos</h2>
-  <p>Browse sample videos, search by title or creator, and publish your own video posts from your browser.</p>
-  <p><a href="https://github.com/MauriceCraft/YouMaurice">View the repository</a></p>
-</div>
+**YouMaurice** is a YouTube-inspired place to watch and share videos.
 
----
-
-## About
-
-YouMaurice is a lightweight, YouTube-inspired video website built with HTML, CSS, and JavaScript. It has a video feed, a watch player, category filters, search, and a form for creating video posts.
-
-The current version is a front-end prototype. It runs in your browser and does not yet have accounts, a server, or a shared online video library.
+Live site: https://mauricecraft.github.io/youmaurice
 
 ## Features
 
-| Feature | What it does |
+- Browse community uploads and sample videos
+- Watch videos in the built-in player
+- Search by video title, creator, or description
+- Filter by Learning, Music, Gaming, and Fun
+- Create an account and sign in
+- Upload videos to shared online storage
+- View videos uploaded by the signed-in account
+- Responsive layout for desktop, tablet, and mobile
+
+## How it works
+
+The website is hosted with GitHub Pages. Supabase provides accounts, the shared video database, and video storage.
+
+- Supabase Auth handles sign-in and account creation.
+- The `public.videos` table stores video details.
+- The public Supabase Storage bucket named `videos` stores video files and optional thumbnails.
+- Community uploads are loaded from Supabase, so they are not limited to the browser or device that uploaded them.
+
+The current upload limit in the website is **6 MB per video**.
+
+## Supabase setup
+
+The site is configured to use the YouMaurice Supabase project. Its URL and publishable key are in `index.html`. A publishable key is intended for browser use; access must be controlled by Supabase Row Level Security and Storage policies.
+
+The app expects the `public.videos` table to contain these columns:
+
+| Column | Purpose |
 | --- | --- |
-| Video feed | Browse the sample videos shown on the home page |
-| Video player | Open a video and watch it with the built-in player |
-| Search | Find videos by title, creator, or description |
-| Categories | Filter videos by Learning, Music, Gaming, or Fun |
-| Create videos | Add a title, channel name, description, category, video, and optional thumbnail |
-| My videos | See the videos you have saved in your browser |
-| Responsive layout | Use the site on desktop, tablet, or mobile screens |
+| `id` | Video row ID |
+| `user_id` | ID of the account that uploaded it |
+| `title` | Video title |
+| `channel_name` | Creator/channel name |
+| `description` | Video description |
+| `category` | Learning, Music, Gaming, or Fun |
+| `video_path` | Path to the video in the `videos` bucket |
+| `thumbnail_path` | Optional thumbnail path |
+| `created_at` | Upload date |
 
-## Getting started
+For uploads and playback to work, configure Supabase so signed-in users can upload to the `videos` bucket, signed-in users can insert their own video rows, and visitors can read community video rows and the public video files. Keep Row Level Security enabled and restrict changes to each user's own rows. Do not put a Supabase service-role key in this website.
 
-You do not need to install anything.
+## Run locally
 
-1. Download or clone this repository.
-2. Open `index.html` in a modern web browser.
-3. Browse the sample videos or select **Create** to add a video.
-4. Open **My videos** to see your saved uploads.
+1. Clone or download this repository.
+2. Open `index.html` in a modern browser, or serve the folder with a local web server.
+3. Sign in or create an account.
+4. Upload a small test video and check that it appears in the Community feed.
 
-For the best experience, use a recent version of Chrome, Safari, Firefox, or Edge.
-
-## How video uploads work right now
-
-This version stores uploaded videos in your browser using IndexedDB.
-
-- Your uploads are saved on the device and browser where you created them.
-- Other people cannot see your uploads.
-- Clearing the browser's site data may remove saved videos.
-- Keep a separate copy of your original video files.
-
-The current upload limit is 150 MB per video.
-
-## Built with
-
-- **HTML** for the page structure
-- **CSS** for the layout and styling
-- **JavaScript** for search, filtering, the video player, and uploads
-- **IndexedDB** for saving videos locally in the browser
-
-## Project structure
+## Project files
 
 ```
 YouMaurice/
@@ -63,13 +61,12 @@ YouMaurice/
 └── README.md
 ```
 
-## What's next
+## Troubleshooting
 
-YouMaurice is an early prototype. A future version could add user accounts, online video hosting, public creator channels, comments, likes, and a genuinely shared video feed.
-
-## Contributing
-
-Ideas and improvements are welcome. You can open an issue to report a bug or suggest a feature, or submit a pull request with a change.
+- **The page is blank:** check the browser console for JavaScript or network errors.
+- **Sign-in fails:** check the Supabase Auth settings and email-confirmation requirements.
+- **Videos do not load:** check that the `videos` bucket is public and that the table has a public read policy.
+- **Uploads fail:** check the Storage upload policy, the table insert policy, and the 6 MB website limit.
 
 ## License
 

@@ -97,30 +97,17 @@ const demoVideos = [
  {id:'demo2',title:'Sintel — Movie Trailer',creator:'Durian Open Movie Project',category:'fun',views:'Demo video',description:'A sample trailer for testing the video player.',src:'https://media.w3.org/2010/05/sintel/trailer.mp4',poster:'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=900'},
  {id:'demo3',title:'Learning with video',creator:'YouMaurice Picks',category:'learning',views:'Demo video',description:'A short sample clip. Add your own videos with the Create button.',src:'https://media.w3.org/2010/05/bunny/trailer.mp4',poster:'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900'}
 ];
-let videos = [...demoVideos], currentView='home', currentFilter='all', db;
+let videos = [...demoVideos], currentView='home', currentFilter='all';
 const grid=document.getElementById('videoGrid'), empty=document.getElementById('empty');
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
 function safeText(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function loadDatabase(){
- return new Promise((resolve,reject)=>{
-  const request=indexedDB.open('YouMauriceVideos',1);
-  request.onupgradeneeded=()=>request.result.createObjectStore('videos',{keyPath:'id'});
-  request.onsuccess=()=>{db=request.result;resolve()};
-  request.onerror=()=>reject(request.error);
- });
-}
-function getUploads(){
- return new Promise((resolve,reject)=>{
-  const request=db.transaction('videos','readonly').objectStore('videos').getAll();
-  request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error);
- });
-}
+
 function render(){
  const q=document.getElementById('searchInput').value.trim().toLowerCase();
  let list=[...videos];
- if(currentView==='mine') list=list.filter(v=>v.localUpload);
- if(currentView==='trending') list=list.filter(v=>!v.localUpload);
+ if(currentView==='mine') list=list.filter(v=>currentUser && v.user_id===currentUser.id);
+ if(currentView==='trending') list=list.filter(v=>!v.id.startsWith('demo'));
  if(currentFilter!=='all') list=list.filter(v=>v.category===currentFilter);
  if(q) list=list.filter(v=>(v.title+' '+v.creator+' '+v.description).toLowerCase().includes(q));
  document.getElementById('heading').textContent=currentView==='mine'?'My videos':currentView==='trending'?'Trending videos':'Videos to watch';
@@ -135,7 +122,7 @@ function render(){
  empty.hidden=list.length!==0;
 }
 function watch(v){
- const player=document.getElementById('player');player.pause();player.src=v.localUpload?URL.createObjectURL(v.file):v.src;player.poster=v.poster||'';
+ const player=document.getElementById('player');player.pause();player.src=v.src;player.poster=v.poster||'';
  document.getElementById('watchTitle').textContent='Now watching';
  document.getElementById('watchName').textContent=v.title;
  document.getElementById('watchMeta').textContent=v.creator+' · '+(v.views||'New video');
@@ -143,16 +130,15 @@ function watch(v){
  openModal('watchModal');player.load();
 }
 async function refreshUploads(){
- const saved=await getUploads();
  const {data:cloudRows,error}=await supabase.from('videos').select('*').order('created_at',{ascending:false});
- if(error) console.error('Could not load shared videos:',error.message);
+ if(error) throw error;
  const cloud=(cloudRows||[]).map(v=>({
-  id:v.id,title:v.title,creator:v.channel_name,description:v.description||'',category:v.category||'fun',
+  id:String(v.id),user_id:v.user_id,title:v.title,creator:v.channel_name,description:v.description||'',category:v.category||'fun',
   src:supabase.storage.from('videos').getPublicUrl(v.video_path).data.publicUrl,
   poster:v.thumbnail_path?supabase.storage.from('videos').getPublicUrl(v.thumbnail_path).data.publicUrl:'',
   views:'Community video',createdAt:v.created_at
  }));
- videos=[...cloud,...saved.map(v=>({...v,localUpload:true,views:'Saved on this device'})),...demoVideos];render();
+ videos=[...cloud,...demoVideos];render();
 }
 async function updateAuthButton(){
  const {data}=await supabase.auth.getSession();
@@ -183,7 +169,7 @@ document.getElementById('signUpButton').onclick=async()=>{
  status.textContent=data.session?'Account created and signed in!':'Account created. Check your email for a confirmation link, then sign in.';
  if(data.session){await updateAuthButton();await refreshUploads()}
 };
-supabase.auth.onAuthStateChange(()=>{updateAuthButton()});
+supabase.auth.onAuthStateChange(async()=>{await updateAuthButton();try{await refreshUploads()}catch(e){console.error('Could not refresh videos:',e.message)}});
 document.getElementById('uploadClose').onclick=()=>closeModal('uploadModal');
 document.getElementById('watchClose').onclick=()=>{document.getElementById('player').pause();closeModal('watchModal')};
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m){if(m.id==='watchModal')document.getElementById('player').pause();closeModal(m.id)}}));
@@ -227,7 +213,7 @@ document.getElementById('uploadForm').addEventListener('submit',async e=>{
   console.error(err);
  }
 });
-(async()=>{try{await loadDatabase();await updateAuthButton();await refreshUploads()}catch(e){grid.innerHTML='<p class="empty">Your browser does not support local video storage. Try a recent version of Chrome, Safari, Firefox, or Edge.</p>';console.error(e)}})();
+(async()=>{try{await updateAuthButton();await refreshUploads()}catch(e){grid.innerHTML='<p class="empty">Could not load community videos: '+safeText(e.message||'Check your connection and Supabase setup.')+'</p>';console.error(e)}})();
 </script>
 </body>
 </html>

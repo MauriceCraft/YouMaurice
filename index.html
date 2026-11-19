@@ -35,7 +35,7 @@ footer{text-align:center;color:#777;padding:40px 15px;font-size:13px}
 <div class="layout">
   <aside aria-label="Main navigation">
     <button class="active" data-view="home">⌂ &nbsp; Home</button>
-    <button data-view="trending">↗ &nbsp; Trending</button>
+    <button data-view="trending">↗ &nbsp; Community</button>
     <button data-view="mine">▣ &nbsp; My videos</button>
   </aside>
   <main>
@@ -110,7 +110,7 @@ function render(){
  if(currentView==='trending') list=list.filter(v=>!v.id.startsWith('demo'));
  if(currentFilter!=='all') list=list.filter(v=>v.category===currentFilter);
  if(q) list=list.filter(v=>(v.title+' '+v.creator+' '+v.description).toLowerCase().includes(q));
- document.getElementById('heading').textContent=currentView==='mine'?'My videos':currentView==='trending'?'Trending videos':'Videos to watch';
+ document.getElementById('heading').textContent=currentView==='mine'?'My videos':currentView==='trending'?'Community videos':'Videos to watch';
  grid.innerHTML='';
  list.forEach(v=>{
   const card=document.createElement('article');card.className='video-card';card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Watch '+v.title);
@@ -144,7 +144,7 @@ async function updateAuthButton(){
  const {data}=await supabase.auth.getSession();
  currentUser=data.session?.user||null;
  document.getElementById('authOpen').textContent=currentUser?'Sign out':'Sign in';
- document.getElementById('uploadOpen').disabled=!currentUser;
+ document.getElementById('uploadOpen').disabled=false;
  document.getElementById('uploadOpen').title=currentUser?'Create a video':'Sign in before uploading';
 }
 document.getElementById('uploadOpen').onclick=()=>{if(!currentUser){openModal('authModal');return}openModal('uploadModal')};
